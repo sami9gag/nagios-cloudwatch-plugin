@@ -6,13 +6,14 @@ from datetime import datetime, timedelta
 
 class CloudWatchBase(nagiosplugin.Resource):
 
-    def __init__(self, namespace, metric, dimensions, statistic, period, lag, region=None):
+    def __init__(self, namespace, metric, dimensions, statistic, period, lag, region=None, unknown=-1):
         self.namespace = namespace
         self.metric = metric
         self.dimensions = dimensions
         self.statistic = statistic
         self.period = int(period)
         self.lag = int(lag)
+        self.unknown = int(unknown)
         if region:
             self.region = region
         else:
@@ -38,7 +39,10 @@ class CloudWatchMetric(CloudWatchBase):
         stats = cw.get_metric_statistics(self.period, start_time, end_time,
                                          self.metric, self.namespace, self.statistic, self.dimensions)
         if len(stats) == 0:
-            return []
+            if self.unknown >= 0:
+                return [nagiosplugin.Metric('cloudwatchmetric', self.unknown, 'Unknown')]
+            else:
+                return []
 
         stat = stats[0]
         return [nagiosplugin.Metric('cloudwatchmetric', stat[self.statistic], stat['Unit'])]
@@ -178,6 +182,9 @@ def main():
     argp.add_argument('--divisor-statistic', choices=['Average','Sum','SampleCount','Maximum','Minimum'],
                       help='ratio mode: statistic used to evaluate metric of the divisor')
 
+    argp.add_argument('-U', '--unknown', default=-1, type=int,
+                      help='value to return if no value is returned')
+
     argp.add_argument('--delta', type=int,
                       help='time in seconds to build a delta mesurement')
 
@@ -200,7 +207,7 @@ def main():
         metric = CloudWatchDeltaMetric(args.namespace, args.metric, args.dimensions, args.statistic, args.period, args.lag, args.delta, args.region)
         summary = CloudWatchDeltaMetricSummary(args.namespace, args.metric, args.dimensions, args.statistic, args.delta)
     else:
-        metric = CloudWatchMetric(args.namespace, args.metric, args.dimensions, args.statistic, args.period, args.lag, args.region)
+        metric = CloudWatchMetric(args.namespace, args.metric, args.dimensions, args.statistic, args.period, args.lag, args.region, args.unknown)
         summary = CloudWatchMetricSummary(args.namespace, args.metric, args.dimensions, args.statistic)
 
     check = nagiosplugin.Check(
